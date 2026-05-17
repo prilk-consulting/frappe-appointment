@@ -15,7 +15,9 @@
       if (!window.frappe) window.frappe = {};
   
       window.app_name = "{{ app_name }}";
-  
+      window.powered_by_text = "{{ (powered_by_text or '') | replace('"', '\\"') }}";
+      window.powered_by_url = "{{ (powered_by_url or '') | replace('"', '\\"') }}";
+
       frappe.boot = JSON.parse({{ boot }});
       frappe.csrf_token = "{{ csrf_token }}";
     </script>

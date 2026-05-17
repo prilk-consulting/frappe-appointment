@@ -21,7 +21,11 @@
   "zoom_client_secret",
   "column_break_wtbw",
   "section_break_xzxx",
-  "zoom_access_token"
+  "zoom_access_token",
+  "branding_section",
+  "powered_by_text",
+  "column_break_branding",
+  "powered_by_url"
  ],
  "fields": [
   {
@@ -115,13 +119,36 @@
   {
    "fieldname": "column_break_ovdk",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "branding_section",
+   "fieldtype": "Section Break",
+   "label": "Branding"
+  },
+  {
+   "default": "Frappe Appointment",
+   "description": "Text shown in the 'Powered by ...' footer on public booking pages. Leave empty to hide the footer entirely.",
+   "fieldname": "powered_by_text",
+   "fieldtype": "Data",
+   "label": "Powered By Text"
+  },
+  {
+   "fieldname": "column_break_branding",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "https://github.com/rtCamp/frappe-appointment/",
+   "description": "Optional URL the 'Powered by' text links to. Leave empty to render as plain text.",
+   "fieldname": "powered_by_url",
+   "fieldtype": "Data",
+   "label": "Powered By URL"
   }
  ],
  "grid_page_length": 50,
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-04-07 14:00:43.769567",
+ "modified": "2026-05-17 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Appointment",
  "name": "Appointment Settings",
