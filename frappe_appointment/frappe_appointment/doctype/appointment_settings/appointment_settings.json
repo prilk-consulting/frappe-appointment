@@ -29,7 +29,11 @@
   "teams_client_secret",
   "column_break_teams",
   "section_break_teams_token",
-  "teams_access_token"
+  "teams_access_token",
+  "branding_section",
+  "powered_by_text",
+  "column_break_branding",
+  "powered_by_url"
  ],
  "fields": [
   {
@@ -169,6 +173,29 @@
   {
    "fieldname": "column_break_ovdk",
    "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "branding_section",
+   "fieldtype": "Section Break",
+   "label": "Branding"
+  },
+  {
+   "default": "Frappe Appointment",
+   "description": "Text shown in the 'Powered by ...' footer on public booking pages. Leave empty to hide the footer entirely.",
+   "fieldname": "powered_by_text",
+   "fieldtype": "Data",
+   "label": "Powered By Text"
+  },
+  {
+   "fieldname": "column_break_branding",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "https://github.com/rtCamp/frappe-appointment/",
+   "description": "Optional URL the 'Powered by' text links to. Leave empty to render as plain text.",
+   "fieldname": "powered_by_url",
+   "fieldtype": "Data",
+   "label": "Powered By URL"
   }
  ],
  "grid_page_length": 50,
