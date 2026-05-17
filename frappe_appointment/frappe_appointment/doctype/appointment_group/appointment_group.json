@@ -142,8 +142,7 @@
    "fieldname": "event_creator",
    "fieldtype": "Link",
    "label": "Event Creator",
-   "options": "Google Calendar",
-   "reqd": 1
+   "options": "Google Calendar"
   },
   {
    "fieldname": "section_break_gocd",

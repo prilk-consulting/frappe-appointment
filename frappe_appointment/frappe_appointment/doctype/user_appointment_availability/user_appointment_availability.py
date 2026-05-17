@@ -38,9 +38,33 @@ class UserAppointmentAvailability(Document):
                         )
                     )
                 weekdays.append(slot.day)
-        calendar = frappe.get_doc("Google Calendar", self.google_calendar)
-        if not calendar.custom_is_google_calendar_authorized:
-            frappe.throw(frappe._("Please authorize Google Calendar before creating appointment availability."))
+        # Google Calendar validation is optional — users who have not connected Google Calendar
+        # can still create availability records. Without Google Calendar, busy-time cross-checking
+        # is skipped; bookable windows come solely from the UAA time slot definitions.
+        if self.google_calendar:
+            calendar = frappe.get_doc("Google Calendar", self.google_calendar)
+            if not calendar.custom_is_google_calendar_authorized:
+                frappe.throw(frappe._("Please authorize Google Calendar before creating appointment availability."))
+            # Zoom integration requires a Google Calendar to look up the Zoom user email,
+            # so the Zoom check lives inside the same google_calendar guard.
+            if self.enable_scheduling and self.meeting_provider == "Zoom":
+                appointment_settings = frappe.get_single("Appointment Settings")
+                appointment_settings_link = frappe.utils.get_link_to_form("Appointment Settings", None, "Appointment Settings")
+                if not appointment_settings.enable_zoom:
+                    return frappe.throw(frappe._(f"Zoom is not enabled. Please enable it from {appointment_settings_link}."))
+                if (
+                    not appointment_settings.zoom_client_id
+                    or not appointment_settings.get_password("zoom_client_secret")
+                    or not appointment_settings.zoom_account_id
+                ):
+                    return frappe.throw(
+                        frappe._(f"Please set Zoom Account ID, Client ID and Secret in {appointment_settings_link}.")
+                    )
+                if not calendar.custom_zoom_user_email:
+                    google_calendar_link = frappe.utils.get_link_to_form(
+                        "Google Calendar", calendar.name, "Google Calendar"
+                    )
+                    return frappe.throw(frappe._(f"Please set Zoom User Email in {google_calendar_link}."))
         if self.enable_scheduling and not self.slug:
             frappe.throw(frappe._("Please set a slug before enabling scheduling."))
         if self.slug:
@@ -52,24 +76,7 @@ class UserAppointmentAvailability(Document):
                 )
             if frappe.db.exists("User Appointment Availability", {"slug": self.slug, "name": ["!=", self.name]}):
                 frappe.throw(frappe._("Slug already exists. Please set a unique slug."))
-        if self.enable_scheduling and self.meeting_provider == "Zoom":
-            appointment_settings = frappe.get_single("Appointment Settings")
-            appointment_settings_link = frappe.utils.get_link_to_form("Appointment Settings", None, "Appointment Settings")
-            if not appointment_settings.enable_zoom:
-                return frappe.throw(frappe._(f"Zoom is not enabled. Please enable it from {appointment_settings_link}."))
-            if (
-                not appointment_settings.zoom_client_id
-                or not appointment_settings.get_password("zoom_client_secret")
-                or not appointment_settings.zoom_account_id
-            ):
-                return frappe.throw(
-                    frappe._(f"Please set Zoom Account ID, Client ID and Secret in {appointment_settings_link}.")
-                )
-            if not calendar.custom_zoom_user_email:
-                google_calendar_link = frappe.utils.get_link_to_form(
-                    "Google Calendar", calendar.name, "Google Calendar"
-                )
-                return frappe.throw(frappe._(f"Please set Zoom User Email in {google_calendar_link}."))
+        # Microsoft Teams does not require a Google Calendar — check independently.
         if self.enable_scheduling and self.meeting_provider == "Microsoft Teams":
             appointment_settings = frappe.get_single("Appointment Settings")
             appointment_settings_link = frappe.utils.get_link_to_form("Appointment Settings", None, "Appointment Settings")

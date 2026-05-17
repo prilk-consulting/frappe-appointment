@@ -339,45 +339,68 @@ class EventOverride(Event):
 
         members = self.appointment_group.members
 
-        google_calendar_api_obj, account = get_google_calendar_object(self.appointment_group.event_creator)
-
         idx = len(self.event_participants) + 1
 
-        for member in members:
-            try:
-                if member.user == account.user:
-                    continue
+        if self.appointment_group.event_creator:
+            # With Google Calendar: fetch the account so we can skip its own user and add
+            # the Google Calendar account itself as an organiser participant.
+            google_calendar_api_obj, account = get_google_calendar_object(self.appointment_group.event_creator)
 
-                user = frappe.get_doc(
-                    {
-                        "idx": idx,
-                        "doctype": "Event Participants",
-                        "parent": self.name,
-                        "reference_doctype": USER_APPOINTMENT_AVAILABILITY,
-                        "reference_docname": member.user,
-                        "email": member.user,
-                        "parenttype": "Event",
-                        "parentfield": "event_participants",
-                    }
-                )
-                self.event_participants.append(user)
-                idx += 1
-            except Exception:
-                pass
+            for member in members:
+                try:
+                    if member.user == account.user:
+                        continue
 
-        user = frappe.get_doc(
-            {
-                "idx": idx,
-                "doctype": "Event Participants",
-                "parent": self.name,
-                "reference_doctype": "Google Calendar",
-                "reference_docname": account.name,
-                "email": account.user,
-                "parenttype": "Event",
-                "parentfield": "event_participants",
-            }
-        )
-        self.event_participants.append(user)
+                    user = frappe.get_doc(
+                        {
+                            "idx": idx,
+                            "doctype": "Event Participants",
+                            "parent": self.name,
+                            "reference_doctype": USER_APPOINTMENT_AVAILABILITY,
+                            "reference_docname": member.user,
+                            "email": member.user,
+                            "parenttype": "Event",
+                            "parentfield": "event_participants",
+                        }
+                    )
+                    self.event_participants.append(user)
+                    idx += 1
+                except Exception:
+                    pass
+
+            user = frappe.get_doc(
+                {
+                    "idx": idx,
+                    "doctype": "Event Participants",
+                    "parent": self.name,
+                    "reference_doctype": "Google Calendar",
+                    "reference_docname": account.name,
+                    "email": account.user,
+                    "parenttype": "Event",
+                    "parentfield": "event_participants",
+                }
+            )
+            self.event_participants.append(user)
+        else:
+            # Without Google Calendar: add all members as participants directly.
+            for member in members:
+                try:
+                    user = frappe.get_doc(
+                        {
+                            "idx": idx,
+                            "doctype": "Event Participants",
+                            "parent": self.name,
+                            "reference_doctype": USER_APPOINTMENT_AVAILABILITY,
+                            "reference_docname": member.user,
+                            "email": member.user,
+                            "parenttype": "Event",
+                            "parentfield": "event_participants",
+                        }
+                    )
+                    self.event_participants.append(user)
+                    idx += 1
+                except Exception:
+                    pass
 
     def handle_webhook(self, body):
         """Handle the webhook call
@@ -589,7 +612,11 @@ def _create_event_for_appointment_group(
     if len(members) <= 0:
         return frappe.throw(_("No Member found"))
 
-    google_calendar_api_obj, account = get_google_calendar_object(appointment_group.event_creator)
+    # When event_creator (Google Calendar) is set, use it to create a Google Calendar event.
+    # Without it, we still create a Frappe Calendar Event — busy-time cross-check is skipped.
+    account = None
+    if appointment_group.event_creator:
+        _google_calendar_api_obj, account = get_google_calendar_object(appointment_group.event_creator)
 
     if reschedule:
         if not appointment_group.allow_rescheduling:
@@ -658,11 +685,12 @@ def _create_event_for_appointment_group(
         "description": event_info.get("description"),
         "starts_on": starts_on,
         "ends_on": ends_on,
-        "sync_with_google_calendar": 1,
-        "google_calendar": account.name,
-        "google_calendar_id": account.google_calendar_id,
+        # Google Calendar sync is only enabled when an event_creator account is configured.
+        "sync_with_google_calendar": 1 if account else 0,
+        "google_calendar": account.name if account else None,
+        "google_calendar_id": account.google_calendar_id if account else None,
         "pulled_from_google_calendar": 0,
-        "custom_sync_participants_google_calendars": 1,
+        "custom_sync_participants_google_calendars": 1 if account else 0,
         "event_participants": json.loads(event_participants),
         "custom_doctype_link_with_event": json.loads(event_info.get("custom_doctype_link_with_event", "[]")),
         "send_reminder": 0,

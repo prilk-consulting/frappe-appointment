@@ -53,10 +53,12 @@ class AppointmentGroup(Document):
                 return frappe.throw(
                     frappe._(f"Please set Zoom Account ID, Client ID and Secret in {appointment_settings_link}.")
                 )
-            g_calendar = frappe.get_doc("Google Calendar", self.event_creator, "Google Calendar")
-            if not g_calendar.custom_zoom_user_email:
-                g_calendar_link = frappe.utils.get_link_to_form("Google Calendar", self.event_creator)
-                return frappe.throw(frappe._(f"Please set Zoom User Email in {g_calendar_link}."))
+            # Zoom user email is stored on the Google Calendar doc; only check when event_creator is set.
+            if self.event_creator:
+                g_calendar = frappe.get_doc("Google Calendar", self.event_creator, "Google Calendar")
+                if not g_calendar.custom_zoom_user_email:
+                    g_calendar_link = frappe.utils.get_link_to_form("Google Calendar", self.event_creator)
+                    return frappe.throw(frappe._(f"Please set Zoom User Email in {g_calendar_link}."))
 
     def validate_microsoft_teams(self):
         if self.meet_provider != "Microsoft Teams":

@@ -81,12 +81,14 @@ def get_google_calendar_slots_member(
     """
 
     if not member:
-        return None
+        return []
 
     google_calendar_id = frappe.get_value("User Appointment Availability", member, "google_calendar")
 
     if not google_calendar_id:
-        return None
+        # No Google Calendar wired up for this member — skip busy-time check.
+        # The caller concatenates this result; returning [] keeps the slot list intact.
+        return []
 
     google_calendar = frappe.get_doc("Google Calendar", google_calendar_id)
 
