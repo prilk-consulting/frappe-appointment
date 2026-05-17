@@ -58,8 +58,39 @@ class AppointmentGroup(Document):
                 g_calendar_link = frappe.utils.get_link_to_form("Google Calendar", self.event_creator)
                 return frappe.throw(frappe._(f"Please set Zoom User Email in {g_calendar_link}."))
 
+    def validate_microsoft_teams(self):
+        if self.meet_provider != "Microsoft Teams":
+            return
+        appointment_settings = frappe.get_single("Appointment Settings")
+        appointment_settings_link = frappe.utils.get_link_to_form(
+            "Appointment Settings", None, "Appointment Settings"
+        )
+        if not appointment_settings.enable_microsoft_teams:
+            return frappe.throw(
+                frappe._(f"Microsoft Teams is not enabled. Please enable it from {appointment_settings_link}.")
+            )
+        if (
+            not appointment_settings.teams_tenant_id
+            or not appointment_settings.teams_client_id
+            or not appointment_settings.get_password("teams_client_secret", raise_exception=False)
+        ):
+            return frappe.throw(
+                frappe._(f"Please set Microsoft Teams Tenant ID, Client ID and Client Secret in {appointment_settings_link}.")
+            )
+        # Verify every mandatory member has a Teams UPN configured on their UAA
+        for member in self.members:
+            if not member.is_mandatory:
+                continue
+            teams_upn = frappe.db.get_value("User Appointment Availability", member.user, "teams_user_email")
+            if not teams_upn:
+                uaa_link = frappe.utils.get_link_to_form("User Appointment Availability", member.user)
+                return frappe.throw(
+                    frappe._(f"Member {member.user} does not have a Microsoft Teams user email set. Please add it in {uaa_link}.")
+                )
+
     def validate(self):
         self.validate_zoom()
+        self.validate_microsoft_teams()
         self.validate_members_list()
 
     def validate_members_list(self):

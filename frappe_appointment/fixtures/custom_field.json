@@ -779,7 +779,7 @@
   "name": "Event-custom_meeting_provider",
   "no_copy": 0,
   "non_negative": 0,
-  "options": "None\nCustom\nZoom\nGoogle Meet",
+  "options": "None\nCustom\nZoom\nGoogle Meet\nMicrosoft Teams",
   "permlevel": 0,
   "placeholder": null,
   "precision": "",

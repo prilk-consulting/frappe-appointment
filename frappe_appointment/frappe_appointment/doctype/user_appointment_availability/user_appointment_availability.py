@@ -70,6 +70,25 @@ class UserAppointmentAvailability(Document):
                     "Google Calendar", calendar.name, "Google Calendar"
                 )
                 return frappe.throw(frappe._(f"Please set Zoom User Email in {google_calendar_link}."))
+        if self.enable_scheduling and self.meeting_provider == "Microsoft Teams":
+            appointment_settings = frappe.get_single("Appointment Settings")
+            appointment_settings_link = frappe.utils.get_link_to_form("Appointment Settings", None, "Appointment Settings")
+            if not appointment_settings.enable_microsoft_teams:
+                return frappe.throw(
+                    frappe._(f"Microsoft Teams is not enabled. Please enable it from {appointment_settings_link}.")
+                )
+            if (
+                not appointment_settings.teams_tenant_id
+                or not appointment_settings.teams_client_id
+                or not appointment_settings.get_password("teams_client_secret", raise_exception=False)
+            ):
+                return frappe.throw(
+                    frappe._(f"Please set Microsoft Teams Tenant ID, Client ID and Client Secret in {appointment_settings_link}.")
+                )
+            if not self.teams_user_email:
+                return frappe.throw(
+                    frappe._("Please set the Microsoft Teams User Email on this availability record before enabling scheduling with Microsoft Teams.")
+                )
 
 
 def suggest_slug(og_slug: str):

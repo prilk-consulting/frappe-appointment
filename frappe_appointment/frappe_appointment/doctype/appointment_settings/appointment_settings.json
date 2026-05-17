@@ -21,7 +21,15 @@
   "zoom_client_secret",
   "column_break_wtbw",
   "section_break_xzxx",
-  "zoom_access_token"
+  "zoom_access_token",
+  "microsoft_teams_settings_section",
+  "enable_microsoft_teams",
+  "teams_tenant_id",
+  "teams_client_id",
+  "teams_client_secret",
+  "column_break_teams",
+  "section_break_teams_token",
+  "teams_access_token"
  ],
  "fields": [
   {
@@ -101,6 +109,52 @@
    "label": "Access Token"
   },
   {
+   "fieldname": "microsoft_teams_settings_section",
+   "fieldtype": "Section Break",
+   "label": "Microsoft Teams Settings"
+  },
+  {
+   "default": "0",
+   "fieldname": "enable_microsoft_teams",
+   "fieldtype": "Check",
+   "label": "Enable Microsoft Teams"
+  },
+  {
+   "depends_on": "enable_microsoft_teams",
+   "fieldname": "teams_tenant_id",
+   "fieldtype": "Data",
+   "label": "Tenant ID",
+   "mandatory_depends_on": "enable_microsoft_teams"
+  },
+  {
+   "depends_on": "enable_microsoft_teams",
+   "fieldname": "teams_client_id",
+   "fieldtype": "Data",
+   "label": "Client ID",
+   "mandatory_depends_on": "enable_microsoft_teams"
+  },
+  {
+   "depends_on": "enable_microsoft_teams",
+   "fieldname": "teams_client_secret",
+   "fieldtype": "Password",
+   "label": "Client Secret",
+   "mandatory_depends_on": "enable_microsoft_teams"
+  },
+  {
+   "fieldname": "column_break_teams",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "section_break_teams_token",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "teams_access_token",
+   "fieldtype": "Password",
+   "hidden": 1,
+   "label": "Teams Access Token"
+  },
+  {
    "fieldname": "email_template_for_organisers_section",
    "fieldtype": "Section Break",
    "label": "Email Template for Organisers"
@@ -121,7 +175,7 @@
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2025-04-07 14:00:43.769567",
+ "modified": "2026-05-17 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Appointment",
  "name": "Appointment Settings",

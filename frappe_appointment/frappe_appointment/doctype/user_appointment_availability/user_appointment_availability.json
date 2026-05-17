@@ -18,6 +18,7 @@
   "column_break_lser",
   "meeting_provider",
   "meeting_link",
+  "teams_user_email",
   "response_email_template",
   "section_break_fjby",
   "available_durations"
@@ -82,13 +83,21 @@
    "fieldname": "meeting_provider",
    "fieldtype": "Select",
    "label": "Meeting Provider",
-   "options": "None\nCustom\nZoom\nGoogle Meet"
+   "options": "None\nCustom\nZoom\nGoogle Meet\nMicrosoft Teams"
   },
   {
    "depends_on": "eval:doc.enable_scheduling && doc.meeting_provider===\"Custom\"",
    "fieldname": "meeting_link",
    "fieldtype": "Data",
    "label": "Meeting Link"
+  },
+  {
+   "depends_on": "eval:doc.enable_scheduling && doc.meeting_provider===\"Microsoft Teams\"",
+   "description": "The Microsoft 365 UPN (email address) used to create Teams meetings for this user.",
+   "fieldname": "teams_user_email",
+   "fieldtype": "Data",
+   "label": "Microsoft Teams User Email",
+   "mandatory_depends_on": "eval:doc.enable_scheduling && doc.meeting_provider===\"Microsoft Teams\""
   },
   {
    "fieldname": "personal_meetings_section",
@@ -105,7 +114,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-20 12:47:50.808412",
+ "modified": "2026-05-17 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Appointment",
  "name": "User Appointment Availability",

@@ -28,6 +28,7 @@ from frappe_appointment.helpers.google_calendar import (
 )
 from frappe_appointment.helpers.ics_file import add_ics_file_in_attachment
 from frappe_appointment.helpers.utils import utc_to_sys_time
+from frappe_appointment.helpers.teams import create_meeting as create_teams_meeting
 from frappe_appointment.helpers.zoom import create_meeting, delete_meeting, update_meeting
 
 
@@ -56,6 +57,35 @@ class EventOverride(Event):
                 self.custom_meet_data = json.dumps(meet_data, indent=4)
             elif self.appointment_group.meet_provider == "Google Meet":
                 self.add_video_conferencing = 1
+            elif self.appointment_group.meet_provider == "Microsoft Teams":
+                members = self.appointment_group.members or []
+                # Use the first mandatory member as the meeting host (mirrors Zoom convention)
+                host_member = next(
+                    (m for m in members if m.is_mandatory), members[0] if members else None
+                )
+                if not host_member:
+                    frappe.throw(_("No member available to host the Microsoft Teams meeting."))
+                host_upn = frappe.db.get_value(
+                    "User Appointment Availability", host_member.user, "teams_user_email"
+                )
+                if not host_upn:
+                    frappe.throw(
+                        _("Member {0} has no Microsoft Teams user email set on their availability.").format(
+                            host_member.user
+                        )
+                    )
+                starts_on_dt = frappe.utils.get_datetime(self.starts_on)
+                ends_on_dt = frappe.utils.get_datetime(self.ends_on)
+                teams_meeting = create_teams_meeting(
+                    user_upn=host_upn,
+                    subject=self.subject or self.appointment_group.group_name,
+                    start_iso=starts_on_dt.isoformat(),
+                    end_iso=ends_on_dt.isoformat(),
+                )
+                teams_join_url = teams_meeting.get("joinUrl", "")
+                self.description = f"{self.description or ''}\nMeet Link: {teams_join_url}"
+                self.custom_meet_link = teams_join_url
+                self.custom_meet_data = json.dumps(teams_meeting, indent=4)
             elif self.appointment_group.meet_provider == "Custom" and self.appointment_group.meet_link:
                 if self.description:
                     self.description = f"\nMeet Link: {self.appointment_group.meet_link}"
@@ -85,6 +115,26 @@ class EventOverride(Event):
                 self.custom_meet_data = json.dumps(meet_data, indent=4)
             elif self.user_calendar.meeting_provider == "Google Meet":
                 self.add_video_conferencing = 1
+            elif self.user_calendar.meeting_provider == "Microsoft Teams":
+                host_upn = self.user_calendar.teams_user_email
+                if not host_upn:
+                    frappe.throw(
+                        _("Microsoft Teams user email is not set on the availability for {0}.").format(
+                            self.user_calendar.user
+                        )
+                    )
+                starts_on_dt = frappe.utils.get_datetime(self.starts_on)
+                ends_on_dt = frappe.utils.get_datetime(self.ends_on)
+                teams_meeting = create_teams_meeting(
+                    user_upn=host_upn,
+                    subject=self.subject or self.user_calendar.user,
+                    start_iso=starts_on_dt.isoformat(),
+                    end_iso=ends_on_dt.isoformat(),
+                )
+                teams_join_url = teams_meeting.get("joinUrl", "")
+                self.description = f"{self.description or ''}\nMeet Link: {teams_join_url}"
+                self.custom_meet_link = teams_join_url
+                self.custom_meet_data = json.dumps(teams_meeting, indent=4)
             elif self.user_calendar.meeting_provider == "Custom" and self.user_calendar.meeting_link:
                 if self.description:
                     self.description = f"\nMeet Link: {self.user_calendar.meeting_link}"
