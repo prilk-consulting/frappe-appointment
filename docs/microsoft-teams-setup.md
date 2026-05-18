@@ -186,8 +186,11 @@ Save.
 For each person who'll host bookings, open `/app/user-appointment-availability/<their-name>`:
 
 - **Teams User Email**: their Microsoft 365 UPN (the email they sign in to Outlook / Teams with).
+- **Teams User Object ID**: their Entra (Azure AD) Object ID — a GUID.
 
-The UPN is the address that owns the calendar where meetings will appear. It must match a real user in your tenant who has a Teams license.
+Both are required. The UPN is the address that owns the calendar where meetings will appear; the Object ID is what Microsoft Graph actually uses to authorize the Application Access Policy at its service layer. Calling the API with the UPN alone returns `HTTP 404 UnknownError` with an empty message body even when the policy is correctly assigned — confirmed by Microsoft support.
+
+**Where to find the Object ID:** sign in to https://entra.microsoft.com → **Users** → click the user → on the Overview pane copy the **Object ID** (formatted as a GUID, e.g. `5d08d36d-681c-497b-8d14-02cbf8597fbc`).
 
 ### 5.3 Appointment Group
 
@@ -221,6 +224,7 @@ To verify on the Microsoft side, sign in to https://outlook.office.com/calendar 
 | HTTP 401 on token | Client secret expired or was invalidated | Create a new secret in Step 2, paste into Appointment Settings, save. |
 | HTTP 403 when creating meeting | App access policy hasn't propagated yet, OR the user isn't covered by the policy | Wait 10 minutes after `Grant-CsApplicationAccessPolicy`. If using per-user scope (not `-Global`), confirm the host's UPN was granted. |
 | `User not found` / 404 | `Teams User Email` on the UAA doesn't match a real M365 UPN | Sign in to admin.microsoft.com as admin → Users → confirm the exact UPN. Some tenants use `@onmicrosoft.com` suffix instead of the vanity domain. |
+| `HTTP 404 UnknownError` with empty message body | `Teams User Object ID` is missing on the UAA — Graph keys the App Access Policy by Object ID, not UPN | Open https://entra.microsoft.com → Users → select the host → copy the **Object ID** → paste into the UAA's *Teams User Object ID* field. |
 | Validate blocks save with "credentials not configured" | Settings missing one of Tenant ID / Client ID / Client Secret | Open Appointment Settings, fill in the missing field, save. |
 | Meeting created in Frappe but no join URL in response | Graph returned an unexpected payload shape | Check Frappe's Error Log (`/app/error-log`) for the captured response. |
 

@@ -96,6 +96,10 @@ class UserAppointmentAvailability(Document):
                 return frappe.throw(
                     frappe._("Please set the Microsoft Teams User Email on this availability record before enabling scheduling with Microsoft Teams.")
                 )
+            if not self.teams_user_object_id:
+                return frappe.throw(
+                    frappe._("Please set the Microsoft Teams User Object ID on this availability record. Find it in Entra Admin Center → Users → select user → Object ID.")
+                )
 
 
 def suggest_slug(og_slug: str):

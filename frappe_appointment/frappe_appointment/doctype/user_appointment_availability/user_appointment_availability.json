@@ -19,6 +19,7 @@
   "meeting_provider",
   "meeting_link",
   "teams_user_email",
+  "teams_user_object_id",
   "response_email_template",
   "section_break_fjby",
   "available_durations"
@@ -96,6 +97,14 @@
    "fieldname": "teams_user_email",
    "fieldtype": "Data",
    "label": "Microsoft Teams User Email",
+   "mandatory_depends_on": "eval:doc.enable_scheduling && doc.meeting_provider===\"Microsoft Teams\""
+  },
+  {
+   "depends_on": "eval:doc.enable_scheduling && doc.meeting_provider===\"Microsoft Teams\"",
+   "description": "Required. Microsoft Graph keys Application Access Policies by Object ID; UPN alone fails with HTTP 404 UnknownError. Find it in Entra Admin Center → Users → select user → Object ID (GUID).",
+   "fieldname": "teams_user_object_id",
+   "fieldtype": "Data",
+   "label": "Microsoft Teams User Object ID",
    "mandatory_depends_on": "eval:doc.enable_scheduling && doc.meeting_provider===\"Microsoft Teams\""
   },
   {

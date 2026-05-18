@@ -83,11 +83,14 @@ class AppointmentGroup(Document):
         for member in self.members:
             if not member.is_mandatory:
                 continue
-            teams_upn = frappe.db.get_value("User Appointment Availability", member.user, "teams_user_email")
-            if not teams_upn:
+            teams_upn, teams_oid = frappe.db.get_value(
+                "User Appointment Availability", member.user,
+                ["teams_user_email", "teams_user_object_id"],
+            ) or (None, None)
+            if not teams_upn or not teams_oid:
                 uaa_link = frappe.utils.get_link_to_form("User Appointment Availability", member.user)
                 return frappe.throw(
-                    frappe._(f"Member {member.user} does not have a Microsoft Teams user email set. Please add it in {uaa_link}.")
+                    frappe._(f"Member {member.user} is missing Microsoft Teams credentials (User Email and Object ID). Please add them in {uaa_link}.")
                 )
 
     def validate(self):

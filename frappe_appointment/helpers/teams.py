@@ -1,12 +1,28 @@
 import time
+from zoneinfo import ZoneInfo
 
 import frappe
 import requests
+from frappe.utils import get_datetime, get_system_timezone
 
 
 TOKEN_ENDPOINT = "https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token"
-GRAPH_MEETING_ENDPOINT = "https://graph.microsoft.com/v1.0/users/{upn}/onlineMeetings"
+GRAPH_MEETING_ENDPOINT = "https://graph.microsoft.com/v1.0/users/{user_id}/onlineMeetings"
 TOKEN_TTL_BUFFER = 60  # refresh if less than 60s remain before expiry
+
+
+def _to_graph_utc_iso(value) -> str:
+	"""Normalise *value* to a UTC-anchored ISO string Microsoft Graph accepts.
+
+	Frappe stores Event datetimes as naive timestamps in the system timezone;
+	`.isoformat()` of a naive datetime drops the offset entirely, which the
+	Graph onlineMeetings API rejects with HTTP 400 'Request payload cannot be
+	null.' Localise to system tz, convert to UTC, format with explicit 'Z'.
+	"""
+	dt = get_datetime(value)
+	if dt.tzinfo is None:
+		dt = dt.replace(tzinfo=ZoneInfo(get_system_timezone()))
+	return dt.astimezone(ZoneInfo("UTC")).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 # TODO: wire up frappe.integrations.utils.create_request_log once the Zoom path
 # adopts Integration Request logging; for now we mirror the Zoom pattern (raw
@@ -69,44 +85,64 @@ def get_access_token() -> str:
 	return token
 
 
-def create_meeting(user_upn: str, subject: str, start_iso: str, end_iso: str) -> dict:
-	"""Create a Teams online meeting on behalf of *user_upn*.
+def create_meeting(
+	user_object_id: str,
+	subject: str,
+	start_iso: str,
+	end_iso: str,
+	user_upn: str = None,
+) -> dict:
+	"""Create a Teams online meeting on behalf of the given user.
+
+	Microsoft Graph's Application Access Policy is keyed by user Object ID at the
+	service layer — calling the endpoint with the UPN alone returns HTTP 404
+	UnknownError even when the policy is correctly assigned. The Object ID is
+	therefore required; *user_upn* is accepted only for logging context.
 
 	Args:
-	    user_upn: The Microsoft 365 UPN (email) of the organiser user.
-	    subject:   Meeting subject / title.
-	    start_iso: ISO-8601 datetime string with timezone offset, e.g. '2026-07-16T10:00:00+00:00'.
-	    end_iso:   ISO-8601 end datetime string with timezone offset.
+	    user_object_id: The user's Entra/Azure AD Object ID (GUID). Required.
+	    subject:        Meeting subject / title.
+	    start_iso:      ISO-8601 datetime string with timezone offset.
+	    end_iso:        ISO-8601 end datetime string with timezone offset.
+	    user_upn:       Optional UPN (email), used only for diagnostic logging.
 
 	Returns:
 	    The Graph API response dict, which includes at minimum 'joinUrl' and 'id'.
 
 	Raises:
-	    frappe.ValidationError: if the API call fails.
+	    frappe.ValidationError: if the API call fails or the Object ID is missing.
 	"""
-	if not user_upn:
-		frappe.throw(frappe._("Microsoft Teams user email (UPN) is missing for this member."))
+	if not user_object_id:
+		frappe.throw(frappe._("Microsoft Teams user Object ID is missing. Set it on the User Appointment Availability record (Entra Admin Center → Users → Object ID)."))
 
 	token = get_access_token()
 
+	payload = {
+		"subject": subject,
+		"startDateTime": _to_graph_utc_iso(start_iso),
+		"endDateTime": _to_graph_utc_iso(end_iso),
+	}
+
 	resp = requests.post(
-		GRAPH_MEETING_ENDPOINT.format(upn=user_upn),
+		GRAPH_MEETING_ENDPOINT.format(user_id=user_object_id),
 		headers={
 			"Authorization": f"Bearer {token}",
 			"Content-Type": "application/json",
 		},
-		json={
-			"subject": subject,
-			"startDateTime": start_iso,
-			"endDateTime": end_iso,
-		},
+		json=payload,
 		timeout=30,
 	)
 
 	if resp.status_code >= 400:
 		frappe.log_error(
 			title="Microsoft Teams meeting creation failed",
-			message=f"upn={user_upn} status={resp.status_code} body={resp.text[:1500]}",
+			message=(
+				f"object_id={user_object_id} upn={user_upn} "
+				f"status={resp.status_code} "
+				f"sent_payload={payload} "
+				f"sent_body={resp.request.body!r} "
+				f"response_body={resp.text[:1500]}"
+			),
 		)
 		frappe.throw(
 			frappe._("Could not create Microsoft Teams meeting (HTTP {0}).").format(resp.status_code)
