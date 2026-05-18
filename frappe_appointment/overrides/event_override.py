@@ -32,6 +32,51 @@ from frappe_appointment.helpers.teams import create_meeting as create_teams_meet
 from frappe_appointment.helpers.zoom import create_meeting, delete_meeting, update_meeting
 
 
+def _mark_meeting_pending(event, provider: str):
+    """Set the 'creation pending' state used by the background-job path.
+
+    Mirrors the shape used by _preserve_booking_on_meet_failure so downstream
+    code (UI, error log filters, async worker) sees a single consistent marker.
+    """
+    event.custom_meet_link = ""
+    event.custom_meet_data = json.dumps({
+        "creation_pending": True,
+        "provider": provider,
+        "queued_at": now(),
+    }, indent=2)
+    event.description = (
+        f"{event.description or ''}\n\n"
+        f"[Your {provider} meeting link will follow by email in a moment.]"
+    )
+
+
+def _preserve_booking_on_meet_failure(event, provider: str, exc: Exception):
+    """Save-on-failure fallback: keep the booking even if the meet provider API errors.
+
+    Without this, a transient outage at Zoom/Microsoft Teams aborts the entire
+    booking transaction — the customer's lead is lost. Instead, log the failure
+    on the Event itself so the host can manually create a meeting link later,
+    and surface the issue to the host without blocking the customer.
+    """
+    frappe.log_error(
+        title=f"{provider} meeting creation failed — booking preserved",
+        message=f"event_subject={event.subject!r} starts_on={event.starts_on} err={exc!r}",
+    )
+    event.custom_meet_link = ""
+    event.custom_meet_data = json.dumps({
+        "creation_failed": True,
+        "provider": provider,
+        "error": str(exc),
+        "failed_at": now(),
+    }, indent=2)
+    event.description = (
+        f"{event.description or ''}\n\n"
+        f"[{provider} meeting link could not be created automatically — the host will follow up.]"
+    )
+    # Clear any frappe.msgprint/frappe.throw side-effects so the API response stays clean.
+    clear_messages()
+
+
 class EventOverride(Event):
     """Event Doctype Overwrite
 
@@ -45,16 +90,22 @@ class EventOverride(Event):
             self.appointment_group = frappe.get_doc(APPOINTMENT_GROUP, self.custom_appointment_group)
             self.custom_meeting_provider = self.appointment_group.meet_provider
             if self.appointment_group.meet_provider == "Zoom":
-                meet_url, meet_data = create_meeting(
-                    self.appointment_group.event_creator,
-                    self.subject,
-                    self.starts_on,
-                    self.appointment_group.duration_for_event // 60,  # convert to minutes
-                    self.description,
-                )
-                self.description = f"{self.description or ''}\nMeet Link: {meet_url}"
-                self.custom_meet_link = meet_url
-                self.custom_meet_data = json.dumps(meet_data, indent=4)
+                if self.appointment_group.defer_meeting_creation:
+                    _mark_meeting_pending(self, "Zoom")
+                else:
+                    try:
+                        meet_url, meet_data = create_meeting(
+                            self.appointment_group.event_creator,
+                            self.subject,
+                            self.starts_on,
+                            self.appointment_group.duration_for_event // 60,  # convert to minutes
+                            self.description,
+                        )
+                        self.description = f"{self.description or ''}\nMeet Link: {meet_url}"
+                        self.custom_meet_link = meet_url
+                        self.custom_meet_data = json.dumps(meet_data, indent=4)
+                    except Exception as e:
+                        _preserve_booking_on_meet_failure(self, "Zoom", e)
             elif self.appointment_group.meet_provider == "Google Meet":
                 self.add_video_conferencing = 1
             elif self.appointment_group.meet_provider == "Microsoft Teams":
@@ -65,27 +116,35 @@ class EventOverride(Event):
                 )
                 if not host_member:
                     frappe.throw(_("No member available to host the Microsoft Teams meeting."))
-                host_upn = frappe.db.get_value(
-                    "User Appointment Availability", host_member.user, "teams_user_email"
-                )
-                if not host_upn:
+                host_upn, host_oid = frappe.db.get_value(
+                    "User Appointment Availability", host_member.user,
+                    ["teams_user_email", "teams_user_object_id"],
+                ) or (None, None)
+                if not host_oid:
                     frappe.throw(
-                        _("Member {0} has no Microsoft Teams user email set on their availability.").format(
+                        _("Member {0} has no Microsoft Teams Object ID set on their availability.").format(
                             host_member.user
                         )
                     )
-                starts_on_dt = frappe.utils.get_datetime(self.starts_on)
-                ends_on_dt = frappe.utils.get_datetime(self.ends_on)
-                teams_meeting = create_teams_meeting(
-                    user_upn=host_upn,
-                    subject=self.subject or self.appointment_group.group_name,
-                    start_iso=starts_on_dt.isoformat(),
-                    end_iso=ends_on_dt.isoformat(),
-                )
-                teams_join_url = teams_meeting.get("joinUrl", "")
-                self.description = f"{self.description or ''}\nMeet Link: {teams_join_url}"
-                self.custom_meet_link = teams_join_url
-                self.custom_meet_data = json.dumps(teams_meeting, indent=4)
+                if self.appointment_group.defer_meeting_creation:
+                    _mark_meeting_pending(self, "Microsoft Teams")
+                else:
+                    starts_on_dt = frappe.utils.get_datetime(self.starts_on)
+                    ends_on_dt = frappe.utils.get_datetime(self.ends_on)
+                    try:
+                        teams_meeting = create_teams_meeting(
+                            user_object_id=host_oid,
+                            user_upn=host_upn,
+                            subject=self.subject or self.appointment_group.group_name,
+                            start_iso=starts_on_dt.isoformat(),
+                            end_iso=ends_on_dt.isoformat(),
+                        )
+                        teams_join_url = teams_meeting.get("joinUrl", "")
+                        self.description = f"{self.description or ''}\nMeet Link: {teams_join_url}"
+                        self.custom_meet_link = teams_join_url
+                        self.custom_meet_data = json.dumps(teams_meeting, indent=4)
+                    except Exception as e:
+                        _preserve_booking_on_meet_failure(self, "Microsoft Teams", e)
             elif self.appointment_group.meet_provider == "Custom" and self.appointment_group.meet_link:
                 if self.description:
                     self.description = f"\nMeet Link: {self.appointment_group.meet_link}"
@@ -103,38 +162,46 @@ class EventOverride(Event):
             )
 
             if self.user_calendar.meeting_provider == "Zoom":
-                meet_url, meet_data = create_meeting(
-                    self.user_calendar.google_calendar,
-                    self.subject,
-                    self.starts_on,
-                    self.appointment_slot_duration.duration // 60,
-                    self.description,
-                )
-                self.description = f"{self.description or ''}\nMeet Link: {meet_url}"
-                self.custom_meet_link = meet_url
-                self.custom_meet_data = json.dumps(meet_data, indent=4)
+                try:
+                    meet_url, meet_data = create_meeting(
+                        self.user_calendar.google_calendar,
+                        self.subject,
+                        self.starts_on,
+                        self.appointment_slot_duration.duration // 60,
+                        self.description,
+                    )
+                    self.description = f"{self.description or ''}\nMeet Link: {meet_url}"
+                    self.custom_meet_link = meet_url
+                    self.custom_meet_data = json.dumps(meet_data, indent=4)
+                except Exception as e:
+                    _preserve_booking_on_meet_failure(self, "Zoom", e)
             elif self.user_calendar.meeting_provider == "Google Meet":
                 self.add_video_conferencing = 1
             elif self.user_calendar.meeting_provider == "Microsoft Teams":
                 host_upn = self.user_calendar.teams_user_email
-                if not host_upn:
+                host_oid = self.user_calendar.teams_user_object_id
+                if not host_oid:
                     frappe.throw(
-                        _("Microsoft Teams user email is not set on the availability for {0}.").format(
+                        _("Microsoft Teams Object ID is not set on the availability for {0}.").format(
                             self.user_calendar.user
                         )
                     )
                 starts_on_dt = frappe.utils.get_datetime(self.starts_on)
                 ends_on_dt = frappe.utils.get_datetime(self.ends_on)
-                teams_meeting = create_teams_meeting(
-                    user_upn=host_upn,
-                    subject=self.subject or self.user_calendar.user,
-                    start_iso=starts_on_dt.isoformat(),
-                    end_iso=ends_on_dt.isoformat(),
-                )
-                teams_join_url = teams_meeting.get("joinUrl", "")
-                self.description = f"{self.description or ''}\nMeet Link: {teams_join_url}"
-                self.custom_meet_link = teams_join_url
-                self.custom_meet_data = json.dumps(teams_meeting, indent=4)
+                try:
+                    teams_meeting = create_teams_meeting(
+                        user_object_id=host_oid,
+                        user_upn=host_upn,
+                        subject=self.subject or self.user_calendar.user,
+                        start_iso=starts_on_dt.isoformat(),
+                        end_iso=ends_on_dt.isoformat(),
+                    )
+                    teams_join_url = teams_meeting.get("joinUrl", "")
+                    self.description = f"{self.description or ''}\nMeet Link: {teams_join_url}"
+                    self.custom_meet_link = teams_join_url
+                    self.custom_meet_data = json.dumps(teams_meeting, indent=4)
+                except Exception as e:
+                    _preserve_booking_on_meet_failure(self, "Microsoft Teams", e)
             elif self.user_calendar.meeting_provider == "Custom" and self.user_calendar.meeting_link:
                 if self.description:
                     self.description = f"\nMeet Link: {self.user_calendar.meeting_link}"
@@ -166,7 +233,28 @@ class EventOverride(Event):
             self.update_attendees_for_appointment_group()
 
     def after_insert(self):
-        pass  # This exists to prevent errors in derived classes.
+        # If the booking's Appointment Group has defer_meeting_creation=1, the
+        # meeting was NOT created synchronously in before_insert — kick off the
+        # background worker now. The worker will populate custom_meet_link and
+        # re-fire the confirmation email so the customer receives the link.
+        if not self.custom_appointment_group:
+            return
+        if self.custom_meet_link:
+            return  # already created synchronously
+        try:
+            meet_data = json.loads(self.custom_meet_data or "{}")
+        except Exception:
+            meet_data = {}
+        if not meet_data.get("creation_pending"):
+            return
+        frappe.enqueue(
+            "frappe_appointment.helpers.meet_async.create_meeting_for_event",
+            queue="default",
+            timeout=120,
+            enqueue_after_commit=True,
+            job_name=f"create_meeting_for_event:{self.name}",
+            event_name=self.name,
+        )
 
     def as_dict(self, *args, **kwargs):
         """
@@ -732,6 +820,13 @@ def _create_event_for_appointment_group(
         resp = {"message": _("Event has been created"), "event_id": event.name}
         resp["meeting_provider"] = event.custom_meeting_provider
         resp["meet_link"] = event.custom_meet_link
+        # Surface deferred-creation state so the frontend can render
+        # "link will arrive by email" instead of an empty join link.
+        try:
+            _meet_data = json.loads(event.custom_meet_data or "{}")
+        except Exception:
+            _meet_data = {}
+        resp["meet_link_pending"] = bool(_meet_data.get("creation_pending"))
         if appointment_group.allow_rescheduling:
             event = frappe.get_doc("Event", event.name)
             resp["reschedule_url"] = event.reschedule_url

@@ -28,6 +28,7 @@
   "section_break_jbhn",
   "meet_provider",
   "meet_link",
+  "defer_meeting_creation",
   "response_email_template",
   "section_break_pudv",
   "send_email_alerts",
@@ -100,6 +101,14 @@
    "hide_days": 1,
    "hide_seconds": 1,
    "label": "Minimum Buffer Time"
+  },
+  {
+   "default": "0",
+   "depends_on": "eval:doc.meet_provider===\"Zoom\" || doc.meet_provider===\"Microsoft Teams\";",
+   "description": "When enabled, the booking is saved instantly and the meeting link is created in a background job. Useful for spam-prone public groups and when the provider API is slow or unreliable. The meeting link arrives by email when the job finishes.",
+   "fieldname": "defer_meeting_creation",
+   "fieldtype": "Check",
+   "label": "Create meeting link in background"
   },
   {
    "depends_on": "eval:doc.meet_provider===\"Custom\";",
