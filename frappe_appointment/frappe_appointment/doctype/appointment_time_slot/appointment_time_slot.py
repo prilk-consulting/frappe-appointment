@@ -10,6 +10,8 @@ from frappe.integrations.doctype.google_calendar.google_calendar import (
 )
 from frappe.model.document import Document
 
+from frappe_appointment.helpers.microsoft_calendar import get_busy_slots as get_microsoft_busy_slots
+from frappe_appointment.helpers.microsoft_calendar import is_microsoft_calendar_installed
 from frappe_appointment.helpers.utils import (
     compare_end_time_slots,
     convert_timezone_to_utc,
@@ -85,7 +87,11 @@ def get_google_calendar_slots_member(
     google_calendar_id = frappe.get_value("User Appointment Availability", member, "google_calendar")
 
     if not google_calendar_id:
-        return None
+        # No Google Calendar: use the member's Microsoft Calendar busy time, if linked.
+        microsoft_calendar = is_microsoft_calendar_installed() and frappe.get_value(
+            "User Appointment Availability", member, "microsoft_calendar"
+        )
+        return get_microsoft_busy_slots(microsoft_calendar, date, starttime, endtime) if microsoft_calendar else []
 
     google_calendar = frappe.get_doc("Google Calendar", google_calendar_id)
 

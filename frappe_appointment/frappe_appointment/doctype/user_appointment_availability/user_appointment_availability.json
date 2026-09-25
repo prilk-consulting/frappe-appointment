@@ -43,7 +43,7 @@
    "fieldtype": "Link",
    "label": "Google Calendar",
    "options": "Google Calendar",
-   "reqd": 1
+   "description": "Or link a Microsoft Calendar (with the microsoft_integrations app)."
   },
   {
    "default": "0",
@@ -82,7 +82,7 @@
    "fieldname": "meeting_provider",
    "fieldtype": "Select",
    "label": "Meeting Provider",
-   "options": "None\nCustom\nZoom\nGoogle Meet"
+   "options": "None\nCustom\nZoom\nGoogle Meet\nMicrosoft Teams"
   },
   {
    "depends_on": "eval:doc.enable_scheduling && doc.meeting_provider===\"Custom\"",
@@ -105,7 +105,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2025-02-20 12:47:50.808412",
+ "modified": "2026-09-25 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Appointment",
  "name": "User Appointment Availability",

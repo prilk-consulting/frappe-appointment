@@ -38,9 +38,13 @@ class UserAppointmentAvailability(Document):
                         )
                     )
                 weekdays.append(slot.day)
-        calendar = frappe.get_doc("Google Calendar", self.google_calendar)
-        if not calendar.custom_is_google_calendar_authorized:
-            frappe.throw(frappe._("Please authorize Google Calendar before creating appointment availability."))
+        calendar = None
+        if self.google_calendar:
+            calendar = frappe.get_doc("Google Calendar", self.google_calendar)
+            if not calendar.custom_is_google_calendar_authorized:
+                frappe.throw(frappe._("Please authorize Google Calendar before creating appointment availability."))
+        elif not self.get("microsoft_calendar"):
+            frappe.throw(frappe._("Please link a Google Calendar or a Microsoft Calendar."))
         if self.enable_scheduling and not self.slug:
             frappe.throw(frappe._("Please set a slug before enabling scheduling."))
         if self.slug:
@@ -52,6 +56,10 @@ class UserAppointmentAvailability(Document):
                 )
             if frappe.db.exists("User Appointment Availability", {"slug": self.slug, "name": ["!=", self.name]}):
                 frappe.throw(frappe._("Slug already exists. Please set a unique slug."))
+        if self.enable_scheduling and self.meeting_provider in ("Google Meet", "Zoom") and not calendar:
+            frappe.throw(frappe._("{0} requires a Google Calendar.").format(self.meeting_provider))
+        if self.enable_scheduling and self.meeting_provider == "Microsoft Teams" and not self.get("microsoft_calendar"):
+            frappe.throw(frappe._("Microsoft Teams requires a Microsoft Calendar."))
         if self.enable_scheduling and self.meeting_provider == "Zoom":
             appointment_settings = frappe.get_single("Appointment Settings")
             appointment_settings_link = frappe.utils.get_link_to_form(

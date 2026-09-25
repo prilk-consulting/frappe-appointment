@@ -138,12 +138,11 @@
    "fieldtype": "Column Break"
   },
   {
-   "description": "The given google calendar will use to create the Google events for given appointment group.",
+   "description": "Or link a Microsoft Calendar (with the microsoft_integrations app).",
    "fieldname": "event_creator",
    "fieldtype": "Link",
    "label": "Event Creator",
-   "options": "Google Calendar",
-   "reqd": 1
+   "options": "Google Calendar"
   },
   {
    "fieldname": "section_break_gocd",
@@ -223,7 +222,7 @@
    "fieldname": "meet_provider",
    "fieldtype": "Select",
    "label": "Meet Provider",
-   "options": "None\nCustom\nZoom\nGoogle Meet"
+   "options": "None\nCustom\nZoom\nGoogle Meet\nMicrosoft Teams"
   },
   {
    "depends_on": "send_email_alerts",
@@ -250,7 +249,7 @@
   }
  ],
  "links": [],
- "modified": "2025-04-23 11:11:22.130701",
+ "modified": "2026-09-25 00:00:00.000000",
  "modified_by": "Administrator",
  "module": "Frappe Appointment",
  "name": "Appointment Group",

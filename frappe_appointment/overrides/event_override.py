@@ -28,8 +28,21 @@ from frappe_appointment.helpers.google_calendar import (
     insert_event_in_google_calendar_override,
 )
 from frappe_appointment.helpers.ics_file import add_ics_file_in_attachment
+from frappe_appointment.helpers.microsoft_calendar import get_event_fields as get_microsoft_event_fields
 from frappe_appointment.helpers.utils import utc_to_sys_time
 from frappe_appointment.helpers.zoom import create_meeting, delete_meeting, update_meeting
+
+
+def get_event_creator(appointment_group):
+    """The calendar account that organises the group's events: its Google Calendar, else its Microsoft Calendar."""
+    if appointment_group.event_creator:
+        _, account = get_google_calendar_object(appointment_group.event_creator)
+        return account
+    if appointment_group.get("microsoft_calendar"):
+        return frappe.get_doc("Microsoft Calendar", appointment_group.microsoft_calendar)
+    frappe.throw(
+        _("Appointment Group {0} has no Google or Microsoft Calendar event creator.").format(appointment_group.name)
+    )
 
 
 class EventOverride(Event):
@@ -55,7 +68,7 @@ class EventOverride(Event):
                 self.description = f"{self.description or ''}\nMeet Link: {meet_url}"
                 self.custom_meet_link = meet_url
                 self.custom_meet_data = json.dumps(meet_data, indent=4)
-            elif self.appointment_group.meet_provider == "Google Meet":
+            elif self.appointment_group.meet_provider in ("Google Meet", "Microsoft Teams"):
                 self.add_video_conferencing = 1
             elif self.appointment_group.meet_provider == "Custom" and self.appointment_group.meet_link:
                 if self.description:
@@ -84,7 +97,7 @@ class EventOverride(Event):
                 self.description = f"{self.description or ''}\nMeet Link: {meet_url}"
                 self.custom_meet_link = meet_url
                 self.custom_meet_data = json.dumps(meet_data, indent=4)
-            elif self.user_calendar.meeting_provider == "Google Meet":
+            elif self.user_calendar.meeting_provider in ("Google Meet", "Microsoft Teams"):
                 self.add_video_conferencing = 1
             elif self.user_calendar.meeting_provider == "Custom" and self.user_calendar.meeting_link:
                 if self.description:
@@ -97,6 +110,7 @@ class EventOverride(Event):
                     "doctype": "Appointment Group",
                     "group_name": "Personal Meeting",
                     "event_creator": self.user_calendar.get("google_calendar"),
+                    "microsoft_calendar": self.user_calendar.get("microsoft_calendar"),
                     "event_organizer": self.user_calendar.get("user"),
                     "members": [{"user": self.user_calendar.get("name"), "is_mandatory": 1}],
                     "duration_for_event": self.appointment_slot_duration.duration,
@@ -290,7 +304,7 @@ class EventOverride(Event):
 
         members = self.appointment_group.members
 
-        _, account = get_google_calendar_object(self.appointment_group.event_creator)
+        account = get_event_creator(self.appointment_group)
 
         idx = len(self.event_participants) + 1
 
@@ -321,7 +335,7 @@ class EventOverride(Event):
                 "idx": idx,
                 "doctype": "Event Participants",
                 "parent": self.name,
-                "reference_doctype": "Google Calendar",
+                "reference_doctype": account.doctype,
                 "reference_docname": account.name,
                 "email": account.user,
                 "parenttype": "Event",
@@ -541,7 +555,7 @@ def _create_event_for_appointment_group(
     if len(members) <= 0:
         return frappe.throw(frappe._("No Member found"))
 
-    _, account = get_google_calendar_object(appointment_group.event_creator)
+    account = get_event_creator(appointment_group)
 
     if reschedule:
         if not appointment_group.allow_rescheduling:
@@ -613,11 +627,6 @@ def _create_event_for_appointment_group(
         "description": event_info.get("description"),
         "starts_on": starts_on,
         "ends_on": ends_on,
-        "sync_with_google_calendar": 1,
-        "google_calendar": account.name,
-        "google_calendar_id": account.google_calendar_id,
-        "pulled_from_google_calendar": 0,
-        "custom_sync_participants_google_calendars": 1,
         "event_participants": json.loads(event_participants),
         "custom_doctype_link_with_event": json.loads(event_info.get("custom_doctype_link_with_event", "[]")),
         "send_reminder": 0,
@@ -625,6 +634,21 @@ def _create_event_for_appointment_group(
         "custom_appointment_group": appointment_group.name,
         "event_info": event_info,
     }
+
+    if account.doctype == "Google Calendar":
+        calendar_event.update(
+            {
+                "sync_with_google_calendar": 1,
+                "google_calendar": account.name,
+                "google_calendar_id": account.google_calendar_id,
+                "pulled_from_google_calendar": 0,
+                "custom_sync_participants_google_calendars": 1,
+            }
+        )
+    else:
+        calendar_event.update(
+            get_microsoft_event_fields(account.name, appointment_group.meet_provider == "Microsoft Teams")
+        )
 
     if personal:
         calendar_event["custom_user_calendar"] = event_info.get("user_calendar")
@@ -648,6 +672,10 @@ def _create_event_for_appointment_group(
         return frappe.throw(webhook_call["message"])
 
     event.insert(ignore_permissions=True)
+
+    if event.get("microsoft_teams_link") and not event.custom_meet_link:
+        # microsoft_integrations stores the Teams link on insert, like google_meet_link for Google Meet
+        event.db_set("custom_meet_link", event.microsoft_teams_link, update_modified=False)
 
     # nosemgrep
     frappe.db.commit()

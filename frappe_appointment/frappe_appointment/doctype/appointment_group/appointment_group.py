@@ -59,8 +59,17 @@ class AppointmentGroup(Document):
                 return frappe.throw(frappe._(f"Please set Zoom User Email in {g_calendar_link}."))
 
     def validate(self):
+        self.validate_calendar()
         self.validate_zoom()
         self.validate_members_list()
+
+    def validate_calendar(self):
+        if not self.event_creator and not self.get("microsoft_calendar"):
+            frappe.throw(frappe._("Please set a Google Calendar or a Microsoft Calendar as event creator."))
+        if self.meet_provider in ("Google Meet", "Zoom") and not self.event_creator:
+            frappe.throw(frappe._("{0} requires a Google Calendar as event creator.").format(self.meet_provider))
+        if self.meet_provider == "Microsoft Teams" and not self.get("microsoft_calendar"):
+            frappe.throw(frappe._("Microsoft Teams requires a Microsoft Calendar as event creator."))
 
     def validate_members_list(self):
         is_valid_list = [member for member in self.members if member.is_mandatory]

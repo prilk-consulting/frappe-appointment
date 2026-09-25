@@ -11,6 +11,7 @@
 ## Key Features
 
 - **Google Calendar Integration**: Syncs with Google Calendar to prevent scheduling conflicts.
+- **Microsoft 365 Calendar Integration**: The same for Outlook calendars and Microsoft Teams, through the [microsoft_integrations](https://github.com/prilk-consulting/microsoft_integrations) app. See [docs/microsoft-calendar.md](docs/microsoft-calendar.md).
 - **ERPNext Leave Integration**: Blocks time slots based on ERPNext leave records.
 - **Zoom & Google Meet Integration**: Auto-generates meeting links for Zoom and Google Meet.
 - **Rescheduling Support**: Enables participants to reschedule meetings easily.
