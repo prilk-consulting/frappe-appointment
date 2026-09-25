@@ -46,11 +46,7 @@ def get_context(context):
 
     # Branding footer ("Powered by …") on the public booking pages.
     # Empty text → hide the footer. Default keeps the upstream branding.
-    context["powered_by_text"] = (
-        frappe.db.get_single_value("Appointment Settings", "powered_by_text") or ""
-    ).strip()
-    context["powered_by_url"] = (
-        frappe.db.get_single_value("Appointment Settings", "powered_by_url") or ""
-    ).strip()
+    context["powered_by_text"] = (frappe.db.get_single_value("Appointment Settings", "powered_by_text") or "").strip()
+    context["powered_by_url"] = (frappe.db.get_single_value("Appointment Settings", "powered_by_url") or "").strip()
 
     return context
